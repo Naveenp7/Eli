@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electricity Management Calculator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0b0f4770;
+            padding-top: 50px;
+            color: #ffffff;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background-color: #2c2c2c;
+        }
+        .form-label {
+            color: #e0e0e0;
+        }
+        #previous-entries {
+            margin-top: 20px;
+        }
+        #previous-entries table {
+            color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h2 class="text-center mb-0">Electricity Management Calculator</h2>
+                    </div>
+                    <div class="card-body">
+                        <!-- Submission Form -->
+                        <form id="chatbot-form">
+                            <div class="mb-3">
+                                <label for="institution-type" class="form-label">What type of institution?</label>
+                                <select class="form-select" id="institution-type" required>
+                                    <option value="home">Home</option>
+                                    <option value="business">Business</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="bill-date" class="form-label">Bill Date</label>
+                                <input type="date" class="form-control" id="bill-date" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="historical-units" class="form-label">Electricity Units for This Bill</label>
+                                <input type="number" class="form-control" id="historical-units" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="previous-bill" class="form-label">Bill Amount</label>
+                                <input type="number" class="form-control" id="previous-bill" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="num-appliances" class="form-label">How many electrical appliances do you use?</label>
+                                <input type="number" class="form-control" id="num-appliances" min="1" max="30" required>
+                            </div>
+                            
+                            <div class="mb-3" id="appliance-table-container" style="display:none;">
+                                <label class="form-label">Enter appliance details:</label>
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Appliance</th>
+                                            <th>Avg Hours Used Per Day</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="appliance-table-body"></tbody>
+                                </table>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary w-100">Submit</button>
+                        </form>
+
+                        <!-- Previous Entries Section -->
+                        <div id="previous-entries" class="mt-4">
+                            <h3>Previous Entries</h3>
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Institution Type</th>
+                                        <th>Units</th>
+                                        <th>Bill Amount</th>
+                                        <th>Appliances</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="previous-entries-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const appliances = ["Fan", "Light Bulb", "AC", "Fridge", "Iron", "Electric Stove", "Television", "Oven", "Mixer/Blender", "Washing Machine", "Vacuum Cleaner"];
+        
+        // Generate appliance table dynamically
+        document.getElementById('num-appliances').addEventListener('change', function() {
+            const tableContainer = document.getElementById('appliance-table-container');
+            const tableBody = document.getElementById('appliance-table-body');
+            tableBody.innerHTML = '';
+            const num = parseInt(this.value);
+            if (num > 0) {
+                tableContainer.style.display = 'block';
+                for (let i = 0; i < num; i++) {
+                    let row = document.createElement('tr');
+                    
+                    let applianceSelect = document.createElement('select');
+                    applianceSelect.className = 'form-select';
+                    appliances.forEach(appliance => {
+                        let option = document.createElement('option');
+                        option.value = appliance;
+                        option.textContent = appliance;
+                        applianceSelect.appendChild(option);
+                    });
+                    let applianceCell = document.createElement('td');
+                    applianceCell.appendChild(applianceSelect);
+                    row.appendChild(applianceCell);
+                    
+                    let hoursSelect = document.createElement('select');
+                    hoursSelect.className = 'form-select';
+                    for (let j = 1; j <= 24; j++) {
+                        let option = document.createElement('option');
+                        option.value = j;
+                        option.textContent = j + ' hr';
+                        hoursSelect.appendChild(option);
+                    }
+                    let hoursCell = document.createElement('td');
+                    hoursCell.appendChild(hoursSelect);
+                    row.appendChild(hoursCell);
+                    
+                    tableBody.appendChild(row);
+                }
+            } else {
+                tableContainer.style.display = 'none';
+            }
+        });
+
+        // Submit form data
+        document.getElementById('chatbot-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                institutionType: document.getElementById('institution-type').value,
+                billDate: document.getElementById('bill-date').value,
+                historicalUnits: document.getElementById('historical-units').value,
+                previousBill: document.getElementById('previous-bill').value,
+                appliances: []
+            };
+
+            document.querySelectorAll('#appliance-table-body tr').forEach(row => {
+                const appliance = row.children[0].querySelector('select').value;
+                const hoursUsed = row.children[1].querySelector('select').value;
+                formData.appliances.push({ appliance, hoursUsed });
+            });
+
+            fetch('/submit-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Data submitted successfully!');
+                    fetchPreviousEntries(); // Refresh previous entries after submission
+                } else {
+                    alert('Error submitting data: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to submit data.');
+            });
+        });
+
+        // Fetch and display previous entries
+        function fetchPreviousEntries() {
+            fetch('/appliances', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('previous-entries-body');
+                tbody.innerHTML = '';
+                if (Array.isArray(data) && data.length > 0) {
+                    data.forEach(entry => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${entry.bill_date || 'N/A'}</td>
+                            <td>${entry.institution_type}</td>
+                            <td>${entry.historical_units}</td>
+                            <td>₹${entry.previous_bill}</td>
+                            <td>${entry.appliance_name} (${entry.avg_hours_used} hr)</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5">No previous entries found.</td></tr>';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching previous entries:', error);
+                document.getElementById('previous-entries-body').innerHTML = 
+                    '<tr><td colspan="5">Error loading previous entries.</td></tr>';
+            });
+        }
+
+        // Load previous entries on page load
+        document.addEventListener('DOMContentLoaded', fetchPreviousEntries);
+    </script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electricity Management Software</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    #loader, #weather-loader {
+      display: none;
+      text-align: center;
+      padding: 20px;  
+      color: #e0e0e0;
+      font-size: 16px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .page, #content > div {
+      animation: fadeIn 0.5s ease-in;
+    }
+    #prediction-content, #recommendations-content, #anomalies-content, #efficiency-content, #weather-content {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #2c2c2c;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    }
+    #weather-content input {
+      padding: 5px;
+      margin-right: 10px;
+      border: none;
+      border-radius: 4px;
+      background-color: #3a3a3a;
+      color: #e0e0e0;
+    }
+    #weather-content button {
+      padding: 5px 10px;
+      background-color: #1e90ff;
+      border: none;
+      border-radius: 4px;
+      color: #e0e0e0;
+      cursor: pointer;
+    }
+    #weather-content button:hover {
+      background-color: #1c86ee;
+    }
+    #weather-content p, #recommendations-content p, #anomalies-content ul, #efficiency-content ul {
+      color: #e0e0e0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    #anomalies-content ul, #efficiency-content ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    #anomalies-content li, #efficiency-content li {
+      margin-bottom: 10px;
+    }
+    #forecast, #recommendations, #anomalies li, #efficiency li, #weather {
+      color: #e0e0e0;
+    }
+    .error {
+      color: #ff6666;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div id="dashboard-page" class="page">
+    <header>
+      <h1>Electricity Management Software</h1>
+      <button onclick="logout()" class="logout-btn">Logout</button>
+    </header>
+    <nav>
+      <button onclick="navigate('chatbot')">ELi Chatbot</button>
+      <button onclick="navigate('calculator')">Set Up</button>
+      <button onclick="navigate('insight')">Insight</button>
+      <button onclick="navigate('account')">Account Details</button>
+    </nav>
+    <main>
+      <div id="content"> 
+        <div id="welcome-content">
+          <h2>Welcome to the Dashboard</h2>
+          <p>Select a feature from the navigation above.</p>
+        </div>
+        <div id="chatbot-content" class="hidden">
+          <h2>Eli Chatbot</h2>
+          <div id="chatbox">
+            <div id="messages"></div>
+            <input type="text" id="userInput" placeholder="Type your message..." />
+            <button onclick="sendMessage()">Send</button>
+          </div>
+        </div>
+        <div id="calculator-content" class="hidden">
+          <iframe src="/static/fullelctro.html" style="width:100%; height:100vh; border:none;"></iframe>
+        </div>
+        <div id="insight-content" class="hidden">
+          <h2>Electricity Insights</h2>
+          <div id="loader">Loading insights...</div>
+          <div id="prediction-content">
+            <h3>Forecasted Next Bill</h3>
+            <p id="forecast">Loading...</p>
+          </div>
+          <div id="weather-content">
+            <h3>Current Weather</h3>
+            <div id="weather-loader">Fetching weather...</div>
+            <p id="weather">Loading...</p>
+            <input type="text" id="weatherCity" placeholder="Enter city (e.g., Edappal)" />
+            <button onclick="fetchWeather()">Update Weather</button>
+          </div>
+          <div id="recommendations-content">
+            <h3>Energy-Saving Recommendations</h3>
+            <p id="recommendations">Loading...</p>
+          </div>
+          <div id="anomalies-content">
+            <h3>Usage Anomalies</h3>
+            <ul id="anomalies">Loading...</ul>
+          </div>
+          <div id="efficiency-content">
+            <h3>Appliance Efficiency Analysis</h3>
+            <ul id="efficiency">Loading...</ul>
+          </div>
+          <canvas id="usageChart"></canvas>
+          <canvas id="billChart"></canvas>
+          <canvas id="applianceChart"></canvas>
+          <canvas id="applianceUsageChart"></canvas>
+          <canvas id="hoursUsedChart"></canvas>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/auth.js"></script>
+  <script>
+    if (!localStorage.getItem('authToken')) {
+      window.location.href = '/login';
+    }
+
+    function navigate(section) {
+      document.querySelectorAll('#content > div').forEach(div => div.classList.add('hidden'));
+      if (section === 'chatbot') {
+        document.getElementById('chatbot-content').classList.remove('hidden');
+      } else if (section === 'calculator') {
+        document.getElementById('calculator-content').classList.remove('hidden');
+      } else if (section === 'insight') {
+        document.getElementById('insight-content').classList.remove('hidden');
+        fetchInsights();
+      } else {
+        document.getElementById('welcome-content').classList.remove('hidden');
+      }
+    }
+
+    function fetchWeather() {
+      const city = document.getElementById('weatherCity').value || 'Edappal';
+      const weatherLoader = document.getElementById('weather-loader');
+      weatherLoader.style.display = 'block';
+      fetch(`http://127.0.0.1:5000/weather?city=${encodeURIComponent(city)}`)
+        .then(response => {
+          if (!response.ok) throw new Error(`Weather fetch failed: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          if (data.error) {
+            document.getElementById('weather').innerHTML = `<span class="error">Error: ${data.error}</span>`;
+          } else {
+            document.getElementById('weather').innerText = data.message;
+            if (data.temperature > 30) {
+              const recommendations = document.getElementById('recommendations');
+              if (!recommendations.innerText.includes("High temperature detected")) {
+                recommendations.innerText += "\nTip: High temperature detected. Consider reducing AC usage.";
+              }
+            }
+          }
+        })
+        .catch(error => {
+          console.error("Weather fetch error:", error);
+          document.getElementById('weather').innerHTML = '<span class="error">Error loading weather</span>';
+        })
+        .finally(() => weatherLoader.style.display = 'none');
+    }
+
+    function sendMessage() {
+      let userInput = document.getElementById("userInput").value;
+      if (!userInput) return;
+
+      let messagesDiv = document.getElementById("messages");
+      let userMessage = document.createElement("div");
+      userMessage.className = "message user";
+      userMessage.innerText = userInput;
+      messagesDiv.appendChild(userMessage);
+
+      fetch("http://127.0.0.1:5000/chatbot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userInput })
+      })
+        .then(response => {
+          if (!response.ok) throw new Error(`Chatbot fetch failed: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          if (data.error) {
+            let botMessage = document.createElement("div");
+            botMessage.className = "message bot error";
+            botMessage.innerText = `Error: ${data.error}`;
+            messagesDiv.appendChild(botMessage);
+          } else {
+            let botMessage = document.createElement("div");
+            botMessage.className = "message bot";
+            botMessage.innerText = data.response || "No response";
+            messagesDiv.appendChild(botMessage);
+          }
+        })
+        .catch(error => {
+          console.error("Chatbot error:", error);
+          let botMessage = document.createElement("div");
+          botMessage.className = "message bot error";
+          botMessage.innerText = "Error: Failed to get response";
+          messagesDiv.appendChild(botMessage);
+        });
+
+      document.getElementById("userInput").value = "";
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    let usageChart, billChart, applianceChart, applianceUsageChart, hoursUsedChart;
+
+    function fetchInsights() {
+      const loader = document.getElementById('loader');
+      loader.style.display = 'block';
+
+      let forecastedBill = 0; // Store the forecast for reuse
+
+      // Fetch insights for charts
+      fetch('/insights')
+        .then(response => {
+          if (!response.ok) throw new Error(`Insights fetch failed: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          if (data.error) {
+            console.error("Error fetching insights:", data.error);
+            return;
+          }
+          // Fetch forecast and then display charts
+          return fetch('http://127.0.0.1:5000/forecast')
+            .then(response => {
+              if (!response.ok) throw new Error(`Forecast fetch failed: ${response.status}`);
+              return response.json();
+            })
+            .then(forecastData => {
+              if (forecastData.error) {
+                document.getElementById('forecast').innerHTML = `<span class="error">Error: ${forecastData.error}</span>`;
+              } else {
+                forecastedBill = forecastData.forecasted_bill || 0;
+                document.getElementById('forecast').innerText = `Next bill: ₹${forecastedBill.toFixed(2)}`;
+              }
+              // Pass forecastedBill to displayCharts
+              displayCharts(data.summary, data.appliance_usage, forecastedBill);
+            })
+            .catch(error => {
+              console.error("Forecast fetch error:", error);
+              document.getElementById('forecast').innerHTML = '<span class="error">Error loading forecast</span>';
+              // Display charts without forecast if it fails
+              displayCharts(data.summary, data.appliance_usage, 0);
+            });
+        })
+        .catch(error => {
+          console.error("Insights fetch error:", error);
+        })
+        .finally(() => loader.style.display = 'none');
+
+      // Fetch weather
+      fetchWeather();
+
+      // Fetch recommendations
+      fetch('http://127.0.0.1:5000/recommendations')
+        .then(response => {
+          if (!response.ok) throw new Error(`Recommendations fetch failed: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          if (data.error) {
+            document.getElementById('recommendations').innerHTML = `<span class="error">Error: ${data.error}</span>`;
+          } else {
+            document.getElementById('recommendations').innerText = data.recommendations || "No recommendations available.";
+          }
+        })
+        .catch(error => {
+          console.error("Recommendations fetch error:", error);
+          document.getElementById('recommendations').innerHTML = '<span class="error">Error loading recommendations</span>';
+        });
+
+      // Fetch anomalies
+      fetch('http://127.0.0.1:5000/anomalies')
+        .then(response => {
+          if (!response.ok) throw new Error(`Anomalies fetch failed: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          const anomaliesList = document.getElementById('anomalies');
+          anomaliesList.innerHTML = '';
+          if (data.error) {
+            anomaliesList.innerHTML = `<li class="error">Error: ${data.error}</li>`;
+          } else if (data.anomalies && data.anomalies.length > 0) {
+            data.anomalies.forEach(anomaly => {
+              const li = document.createElement('li');
+              li.innerText = `Date: ${anomaly.bill_date}, Units: ${anomaly.units}, Bill: ₹${anomaly.bill} - Potential anomaly detected.`;
+              anomaliesList.appendChild(li);
+            });
+          } else {
+            anomaliesList.innerHTML = '<li>No anomalies detected.</li>';
+          }
+        })
+        .catch(error => {
+          console.error("Anomalies fetch error:", error);
+          document.getElementById('anomalies').innerHTML = '<li class="error">Error loading anomalies.</li>';
+        });
+
+      // Fetch efficiency analysis
+      fetch('http://127.0.0.1:5000/efficiency')
+        .then(response => {
+          if (!response.ok) throw new Error(`Efficiency fetch failed: ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          const efficiencyList = document.getElementById('efficiency');
+          efficiencyList.innerHTML = '';
+          if (data.error) {
+            efficiencyList.innerHTML = `<li class="error">Error: ${data.error}</li>`;
+          } else if (data.efficiency && Object.keys(data.efficiency).length > 0) {
+            for (const [appliance, report] of Object.entries(data.efficiency)) {
+              const li = document.createElement('li');
+              li.innerText = `${appliance}: Expected ${report.expected_units} kWh, Actual ${report.actual_units} kWh - ${report.efficiency}`;
+              efficiencyList.appendChild(li);
+            }
+          } else {
+            efficiencyList.innerHTML = '<li>No efficiency data available.</li>';
+          }
+        })
+        .catch(error => {
+          console.error("Efficiency fetch error:", error);
+          document.getElementById('efficiency').innerHTML = '<li class="error">Error loading efficiency analysis.</li>';
+        });
+    }
+
+    function displayCharts(summaryData, applianceData, forecastedBill) {
+      const ctx1 = document.getElementById("usageChart").getContext("2d");
+      const ctx2 = document.getElementById("billChart").getContext("2d");
+      const ctx3 = document.getElementById("applianceChart").getContext("2d");
+      const ctx4 = document.getElementById("applianceUsageChart").getContext("2d");
+      const ctx5 = document.getElementById("hoursUsedChart").getContext("2d");
+
+      if (usageChart) usageChart.destroy();
+      if (billChart) billChart.destroy();
+      if (applianceChart) applianceChart.destroy();
+      if (applianceUsageChart) applianceUsageChart.destroy();
+      if (hoursUsedChart) hoursUsedChart.destroy();
+
+      const labels = summaryData.map(item => item.institution_type);
+      const totalUnits = summaryData.map(item => item.total_units);
+      const avgBills = summaryData.map(item => item.avg_bill);
+      const applianceCounts = summaryData.map(item => item.total_appliances);
+
+      const applianceLabels = applianceData.map(a => a.appliance_name);
+      const applianceUsageCounts = applianceData.map(a => a.usage_count);
+      const avgHoursUsed = applianceData.map(a => a.total_hours);
+
+      usageChart = new Chart(ctx1, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Total Units Consumed (kWh)",
+            data: totalUnits,
+            backgroundColor: "rgba(54, 162, 235, 0.5)",
+            borderColor: "rgba(54, 162, 235, 1)",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "top" }, tooltip: { enabled: true } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      // Use the pre-fetched forecastedBill
+      if (billChart) billChart.destroy();
+      billChart = new Chart(ctx2, {
+        type: "line",
+        data: {
+          labels: [...labels, "Next Month (Forecasted)"],
+          datasets: [{
+            label: "Avg Monthly Bill (₹)",
+            data: [...avgBills, forecastedBill],
+            backgroundColor: "rgba(255, 99, 132, 0.5)",
+            borderColor: "rgba(255, 99, 132, 1)",
+            borderWidth: 2,
+            pointBackgroundColor: [...avgBills.map(() => "rgba(255, 99, 132, 1)"), "rgba(0, 255, 0, 1)"]
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "top" }, tooltip: { enabled: true } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      applianceChart = new Chart(ctx3, {
+        type: "doughnut",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Total Appliances Used",
+            data: applianceCounts,
+            backgroundColor: ["#ffcc00", "#ff6666", "#66b3ff"],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "top" }, tooltip: { enabled: true } }
+        }
+      });
+
+      applianceUsageChart = new Chart(ctx4, {
+        type: "bar",
+        data: {
+          labels: applianceLabels,
+          datasets: [{
+            label: "Appliance Usage Count",
+            data: applianceUsageCounts,
+            backgroundColor: "rgba(153, 102, 255, 0.5)",
+            borderColor: "rgba(153, 102, 255, 1)",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "top" }, tooltip: { enabled: true } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      hoursUsedChart = new Chart(ctx5, {
+        type: "bar",
+        data: {
+          labels: applianceLabels,
+          datasets: [{
+            label: "Avg Hours Used Per Appliance",
+            data: avgHoursUsed,
+            backgroundColor: "rgba(75, 192, 192, 0.5)",
+            borderColor: "rgba(75, 192, 192, 1)",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "top" }, tooltip: { enabled: true } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

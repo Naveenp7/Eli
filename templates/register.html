@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Electricity Management</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="register-container">
+        <h1>Register</h1>
+        <form id="register-form">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="4-Digit Password" maxlength="4" required>
+            <button type="submit">Register</button>
+        </form>
+        <p id="register-error" class="error-message"></p>
+        <p>Already have an account? <a href="/login">Login here</a></p>
+    </div>
+
+    <script src="/static/auth.js"></script>
+    <script>
+        const registerForm = document.getElementById('register-form');
+        const registerError = document.getElementById('register-error');
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Basic validation
+            if (username.trim() === '' || password.length !== 4 || isNaN(Number(password))) {
+                registerError.textContent = 'Invalid username or password. Password must be 4 digits.';
+                return;
+            }
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Registration successful! You can now log in.');
+                    window.location.href = '/login';
+                } else {
+                    registerError.textContent = data.error;
+                }
+            } catch (error) {
+                console.error('Error during registration:', error);
+                registerError.textContent = 'An error occurred. Please try again.';
+            }
+        });
+    </script>
+</body>
+</html>
