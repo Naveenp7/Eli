@@ -1,0 +1,9 @@
+Flask
+scikit-learn
+statsmodels
+numpy
+sqlite3
+requests
+google-generativeai
+google-api-core
+python-dotenv
